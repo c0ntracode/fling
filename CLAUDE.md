@@ -71,13 +71,19 @@ Open `index.html` directly in a browser. No server needed.
 - Ground/brush: `#1a4015` — `#2e6a24` (olive greens, layered)
 
 ## Biome System
-- 6 biome palettes cycle every 1000 distance units:
+- 12 biome palettes cycle every 2000 distance units:
   1. Jungle (greens)
   2. Autumn (oranges/browns)
   3. Desert (sandy yellows)
   4. Night (deep blues)
   5. Ice (cool grays)
   6. Volcanic (reds/darks)
+  7. Cotton Candy (dusky mauve/teal)
+  8. Synthwave (deep purple/neon pink)
+  9. Ocean (dark teal/aqua)
+  10. Sunset (plum/warm orange)
+  11. Lavender (soft purple/cream)
+  12. Bubblegum (deep rose/dark mint)
 - Colors transition as the player progresses, rewarding distance
 
 ## Rope Inventory
@@ -115,7 +121,7 @@ Located at the top of `game.js`:
 - `BOX_ROPES`: 5 (ropes gained per pickup)
 - `BOX_SPACING`: 250 (base distance between boxes)
 - `BOX_SIZE`: 6 (pickup square dimensions)
-- `BIOME_INTERVAL`: 1000 (distance units per biome change)
+- `BIOME_INTERVAL`: 2000 (distance units per biome change)
 - Rope length multiplier: 0.6 (in `fireRope()` — fraction of actual distance)
 - First rope multiplier: 0.9 (longer for gentle pedestal lift-off)
 - Pedestal: 70px tall, 20px wide at x=50
@@ -135,7 +141,7 @@ Located at the top of `game.js`:
 - [x] Parallax jungle background (6 layers, Jungle Hunt style)
 - [x] Smooth camera follow (lerp)
 - [x] Distance tracker (bitmap digits, top-right)
-- [x] Biome color cycling (6 biomes every 1000 units)
+- [x] Biome color cycling (12 biomes every 2000 units)
 - [x] Game over / restart on ground touch
 - [x] Atari 2600-style rope rendering (scanline ball pixels)
 - [x] Limited rope inventory (15 starting, decrements on use)

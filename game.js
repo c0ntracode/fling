@@ -196,7 +196,7 @@ const BIOMES = [
     }
 ];
 
-const BIOME_INTERVAL = 1000; // distance units per biome change
+const BIOME_INTERVAL = 2000; // distance units per biome change
 
 // Active colors (updated based on distance)
 const COLORS = {
