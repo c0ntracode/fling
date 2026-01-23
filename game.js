@@ -38,6 +38,11 @@ const player = {
     vx: 0,
     vy: 0,
     attached: false,
+    firing: false,
+    reeling: false,
+    fireWillConnect: false,
+    ropeProgress: 0,
+    reelLength: 0,
     anchor: { x: 0, y: CEILING_Y },
     ropeLength: 0,
     started: false,
@@ -91,6 +96,10 @@ function resetGame() {
     player.vx = 0;
     player.vy = 0;
     player.attached = false;
+    player.firing = false;
+    player.reeling = false;
+    player.ropeProgress = 0;
+    player.reelLength = 0;
     player.started = false;
     player.ropeLength = 0;
     cameraX = 0;
@@ -327,6 +336,8 @@ function init() {
 
 const ATTACH_SPEED_BOOST = 0.5; // forward speed boost on attach
 const MAX_SPEED = 6; // cap so it doesn't grow forever
+const ROPE_FIRE_SPEED = 45; // pixels per frame the rope tip extends
+const ROPE_REEL_SPEED = 10; // pixels per frame the rope shortens (player pulled up)
 
 function fireRope() {
     if (gameOver) {
@@ -334,33 +345,43 @@ function fireRope() {
         return;
     }
 
-    // Can't fire if out of ropes
+    // Can't fire if out of ropes or already firing/reeling
     if (player.ropes <= 0) return;
+    if (player.firing || player.reeling) return;
 
     // Rope fires up and to the right at ROPE_ANGLE
     const distToCeiling = player.y - CEILING_Y;
     const forwardOffset = distToCeiling * ROPE_FORWARD;
     const ropeLength = Math.sqrt(distToCeiling * distToCeiling + forwardOffset * forwardOffset);
 
+    player.anchor.x = player.x + forwardOffset;
+    player.anchor.y = CEILING_Y;
+    player.started = true;
+    player.ropes--;
+    player.firing = true;
+    player.ropeProgress = 0;
+
     if (ropeLength <= MAX_ROPE_LENGTH) {
-        player.attached = true;
-        player.anchor.x = player.x + forwardOffset;
-        player.anchor.y = CEILING_Y;
-        // First rope is longer for a gentle lift off the pedestal
+        // In range — will connect
         const ropeFactor = player.started ? 0.6 : 0.9;
         player.ropeLength = ropeLength * ropeFactor;
-        player.started = true;
-        player.ropes--;
-
-        // Forward speed boost, capped
-        if (player.vx < MAX_SPEED) {
-            player.vx = Math.min(player.vx + ATTACH_SPEED_BOOST, MAX_SPEED);
-        }
+        player.fireWillConnect = true;
+    } else {
+        // Out of range — rope will reach ceiling and vanish
+        player.fireWillConnect = false;
     }
 }
 
 function releaseRope() {
-    player.attached = false;
+    if (player.reeling) {
+        // Release during reel — start swinging at current length
+        player.reeling = false;
+        player.attached = true;
+        player.ropeLength = player.reelLength;
+    } else {
+        player.attached = false;
+    }
+    player.firing = false;
 }
 
 function update() {
@@ -369,7 +390,67 @@ function update() {
     // Don't move until player fires first rope
     if (!player.started || gameOver) return;
 
-    if (player.attached) {
+    if (player.firing) {
+        // Rope is extending toward ceiling — player in freefall
+        player.vy += GRAVITY;
+        player.x += player.vx;
+        player.y += player.vy;
+
+        // Advance rope progress
+        const dx = player.anchor.x - player.x;
+        const dy = player.anchor.y - player.y;
+        const totalDist = Math.sqrt(dx * dx + dy * dy);
+        player.ropeProgress += ROPE_FIRE_SPEED / totalDist;
+
+        if (player.ropeProgress >= 1) {
+            player.firing = false;
+            if (player.fireWillConnect) {
+                // Rope connected — transition to reeling
+                player.reeling = true;
+                const cdx = player.x - player.anchor.x;
+                const cdy = player.y - player.anchor.y;
+                player.reelLength = Math.sqrt(cdx * cdx + cdy * cdy);
+                // Speed boost on connect
+                if (player.vx < MAX_SPEED) {
+                    player.vx = Math.min(player.vx + ATTACH_SPEED_BOOST, MAX_SPEED);
+                }
+            }
+            // If !fireWillConnect, rope just vanishes — player stays in freefall
+        }
+    } else if (player.reeling) {
+        // Player being pulled up toward anchor — no gravity
+        player.reelLength -= ROPE_REEL_SPEED;
+
+        if (player.reelLength <= player.ropeLength) {
+            // Reached target swing length — attach
+            player.reeling = false;
+            player.attached = true;
+            player.reelLength = player.ropeLength;
+            // Position player at rope length from anchor
+            const dx = player.x - player.anchor.x;
+            const dy = player.y - player.anchor.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist > 0) {
+                const nx = dx / dist;
+                const ny = dy / dist;
+                player.x = player.anchor.x + nx * player.ropeLength;
+                player.y = player.anchor.y + ny * player.ropeLength;
+            }
+        } else {
+            // Move player toward anchor along rope direction
+            const dx = player.x - player.anchor.x;
+            const dy = player.y - player.anchor.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist > 0) {
+                const nx = dx / dist;
+                const ny = dy / dist;
+                player.x = player.anchor.x + nx * player.reelLength;
+                player.y = player.anchor.y + ny * player.reelLength;
+            }
+        }
+        // Preserve horizontal velocity, zero out vertical during reel
+        player.vy = 0;
+    } else if (player.attached) {
         // Pendulum physics via constraint
         // Apply gravity
         player.vy += GRAVITY;
@@ -411,6 +492,8 @@ function update() {
         player.vy = 0;
         player.vx = 0;
         player.attached = false;
+        player.firing = false;
+        player.reeling = false;
 
         if (player.started) {
             gameOver = true;
@@ -512,11 +595,20 @@ function render() {
 
     // Draw rope (Atari 2600 style: 1-pixel ball, 160x192 NTSC)
     // Atari pixels were ~2x wide on our 320-wide canvas, 1px tall
-    if (player.attached) {
-        const ax = player.anchor.x + offsetX;
-        const ay = player.anchor.y;
+    if (player.firing || player.reeling || player.attached) {
         const px = player.x + offsetX;
         const py = player.y;
+        let ax, ay;
+
+        if (player.firing) {
+            // Rope tip extends from player toward anchor
+            ax = px + (player.anchor.x + offsetX - px) * player.ropeProgress;
+            ay = py + (player.anchor.y - py) * player.ropeProgress;
+        } else {
+            // Reeling or attached — full rope from anchor to player
+            ax = player.anchor.x + offsetX;
+            ay = player.anchor.y;
+        }
 
         ctx.fillStyle = COLORS.rope;
 

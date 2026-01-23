@@ -49,4 +49,4 @@ Jungle / Autumn / Desert / Night / Ice / Volcanic / Cotton Candy / Synthwave / O
 
 ## License
 
-Do whatever you want with it.
+[MIT](LICENSE)
