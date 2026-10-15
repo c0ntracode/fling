@@ -49,6 +49,9 @@ const player = {
     ropes: STARTING_ROPES
 };
 
+// Previous-step state, used to interpolate rendering between fixed physics steps
+const prev = { x: 0, y: 0, cam: 0 };
+
 let gameOver = false;
 let finalDistance = 0;
 let frameCount = 0;
@@ -103,6 +106,9 @@ function resetGame() {
     player.started = false;
     player.ropeLength = 0;
     cameraX = 0;
+    prev.x = player.x;
+    prev.y = player.y;
+    prev.cam = 0;
     gameOver = false;
     finalDistance = 0;
     player.ropes = STARTING_ROPES;
@@ -331,7 +337,7 @@ function init() {
         buttonDown = false;
     });
 
-    loop();
+    requestAnimationFrame(loop);
 }
 
 const ATTACH_SPEED_BOOST = 0.5; // forward speed boost on attach
@@ -386,6 +392,9 @@ function releaseRope() {
 
 function update() {
     frameCount++;
+    prev.x = player.x;
+    prev.y = player.y;
+    prev.cam = cameraX;
 
     // Don't move until player fires first rope
     if (!player.started || gameOver) return;
@@ -519,8 +528,8 @@ function update() {
     checkBoxCollision();
 }
 
-function drawParallaxLayer(layer, isTop) {
-    const parallaxOffset = cameraX * layer.speed;
+function drawParallaxLayer(layer, isTop, cam) {
+    const parallaxOffset = cam * layer.speed;
     const startTile = Math.floor(parallaxOffset / layer.spacing);
     const tilesOnScreen = Math.ceil(W / layer.spacing) + 2;
 
@@ -541,16 +550,21 @@ function drawParallaxLayer(layer, isTop) {
     }
 }
 
-function render() {
+function render(alpha) {
+    // Interpolated positions for smooth motion at any refresh rate
+    const cam = prev.cam + (cameraX - prev.cam) * alpha;
+    const playerX = prev.x + (player.x - prev.x) * alpha;
+    const playerY = prev.y + (player.y - prev.y) * alpha;
+
     // Clear with jungle sky
     ctx.fillStyle = COLORS.bg;
     ctx.fillRect(0, 0, W, H);
 
-    const offsetX = -cameraX;
+    const offsetX = -cam;
 
     // Draw canopy parallax layers (back to front)
     for (const layer of PARALLAX.canopy) {
-        drawParallaxLayer(layer, true);
+        drawParallaxLayer(layer, true, cam);
     }
 
     // Draw ceiling base
@@ -563,7 +577,7 @@ function render() {
 
     // Draw brush parallax layers (back to front)
     for (const layer of PARALLAX.brush) {
-        drawParallaxLayer(layer, false);
+        drawParallaxLayer(layer, false, cam);
     }
 
     // Draw ground surface line
@@ -596,8 +610,8 @@ function render() {
     // Draw rope (Atari 2600 style: 1-pixel ball, 160x192 NTSC)
     // Atari pixels were ~2x wide on our 320-wide canvas, 1px tall
     if (player.firing || player.reeling || player.attached) {
-        const px = player.x + offsetX;
-        const py = player.y;
+        const px = playerX + offsetX;
+        const py = playerY;
         let ax, ay;
 
         if (player.firing) {
@@ -625,8 +639,8 @@ function render() {
     }
 
     // Draw player
-    const screenX = player.x + offsetX;
-    const screenY = player.y;
+    const screenX = playerX + offsetX;
+    const screenY = playerY;
     ctx.fillStyle = COLORS.player;
     ctx.fillRect(
         Math.floor(screenX - PLAYER_SIZE / 2),
@@ -694,9 +708,20 @@ function render() {
     }
 }
 
-function loop() {
-    update();
-    render();
+// Fixed timestep: physics is tuned per-frame at 60Hz, so run update() at 60Hz
+// regardless of display refresh rate.
+const STEP = 1000 / 60;
+let lastTime = performance.now();
+let accumulator = 0;
+
+function loop(now) {
+    accumulator += Math.min(now - lastTime, 250); // clamp after tab switches
+    lastTime = now;
+    while (accumulator >= STEP) {
+        update();
+        accumulator -= STEP;
+    }
+    render(accumulator / STEP);
     requestAnimationFrame(loop);
 }
 
